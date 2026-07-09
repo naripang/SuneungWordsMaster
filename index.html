@@ -278,7 +278,7 @@ function renderLogin(){
   };
   panel.appendChild(btn);
   wrap.appendChild(panel);
-  wrap.appendChild(el('footer','note','비밀번호를 잊으셨다면 담임 선생님께 문의하세요.'));
+  wrap.appendChild(el('footer','note','비밀번호를 잊으셨다면 김승호 선생님께 문의하세요.'));
   app.appendChild(wrap);
 
   qs('#loginPw').addEventListener('keydown', e=>{ if(e.key==='Enter') btn.click(); });
@@ -394,10 +394,10 @@ async function renderStudentHome(body){
     const left = el('div');
     const sourceBadge = r.source ? `<span class="badge" style="background:var(--sky-soft,#eef4fb);color:var(--ink);">${r.source}</span>` : '';
     left.innerHTML = `<div class="rl">${r.label || ('회차 '+r.round)} ${sourceBadge}<span class="badge ${cls}">${label}</span></div>
-      <div class="rr">Day ${r.dayStart}~${r.dayEnd} · ${r.openDate} ~ ${r.dueDate}${r.status==='done' ? ' · '+r.score+'/'+r.total+'점' : ''}</div>`;
+      <div class="rr">Day ${r.dayStart}~${r.dayEnd} · ${r.openDate} ~ ${r.dueDate}${r.status==='done' ? ' · 최근 '+r.score+'/'+r.total+'점' : ''}</div>`;
     row.appendChild(left);
-    if(r.status==='available' || r.status==='overdue'){
-      const startBtn = el('button','btn btn-teal btn-sm', '응시하기');
+    if(r.status==='available' || r.status==='overdue' || r.status==='done'){
+      const startBtn = el('button','btn btn-teal btn-sm', r.status==='done' ? '재응시하기' : '응시하기');
       startBtn.onclick = ()=> startTest(r.round);
       row.appendChild(startBtn);
     }
@@ -411,7 +411,11 @@ async function startTest(round){
   app.innerHTML = '<div class="loading"><span class="spinner"></span> 문제를 불러오는 중...</div>';
   const res = await call('getRoundQuestions', {round});
   if(!res.ok){ alert(res.message); state.tab='home'; render(); return; }
-  if(res.alreadyDone){ alert('이미 응시한 회차입니다. (점수 '+res.score+'/'+res.total+')'); state.tab='home'; render(); return; }
+  if(res.previousScore){
+    if(!confirm(`이전 응시 점수는 ${res.previousScore.score}/${res.previousScore.total}점이었어요. 다시 응시하면 이번 결과로 성적이 갱신됩니다. 계속할까요?`)){
+      state.tab='home'; render(); return;
+    }
+  }
   state.quiz = { round: round, questions: res.questions, idx:0, correctCount:0, answers:[], wrongList:[], isFreeStudy:false };
   renderQuizQuestion();
 }
