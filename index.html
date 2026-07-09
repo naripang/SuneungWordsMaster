@@ -389,18 +389,16 @@ async function renderStudentHome(body){
   }
   res.rounds.forEach(r=>{
     const row = el('div','roundcard');
-    const badgeMap = {done:['badge-done','완료'], available:['badge-available','응시 가능'], upcoming:['badge-upcoming','예정'], overdue:['badge-overdue','기한 초과']};
+    const badgeMap = {done:['badge-done','완료'], available:['badge-available','응시 가능']};
     const [cls,label] = badgeMap[r.status];
     const left = el('div');
     const sourceBadge = r.source ? `<span class="badge" style="background:var(--sky-soft,#eef4fb);color:var(--ink);">${r.source}</span>` : '';
     left.innerHTML = `<div class="rl">${r.label || ('회차 '+r.round)} ${sourceBadge}<span class="badge ${cls}">${label}</span></div>
-      <div class="rr">Day ${r.dayStart}~${r.dayEnd} · ${r.openDate} ~ ${r.dueDate}${r.status==='done' ? ' · 최근 '+r.score+'/'+r.total+'점' : ''}</div>`;
+      <div class="rr">Day ${r.dayStart}~${r.dayEnd}${r.status==='done' ? ' · 최근 '+r.score+'/'+r.total+'점' : ''}</div>`;
     row.appendChild(left);
-    if(r.status==='available' || r.status==='overdue' || r.status==='done'){
-      const startBtn = el('button','btn btn-teal btn-sm', r.status==='done' ? '재응시하기' : '응시하기');
-      startBtn.onclick = ()=> startTest(r.round);
-      row.appendChild(startBtn);
-    }
+    const startBtn = el('button','btn btn-teal btn-sm', r.status==='done' ? '재응시하기' : '응시하기');
+    startBtn.onclick = ()=> startTest(r.round);
+    row.appendChild(startBtn);
     panel.appendChild(row);
   });
   body.appendChild(panel);
