@@ -434,7 +434,8 @@ function renderQuizQuestion(){
   const q = quiz.questions[quiz.idx];
 
   const header = el('header','top');
-  header.innerHTML = `<h1>${quiz.isFreeStudy?'자율학습':'단어 시험'}</h1><div class="sub">정답 ${quiz.correctCount} · 오답 ${quiz.idx-quiz.correctCount}</div>`;
+  const titleText = quiz.isWrongReview ? '오답 복습' : (quiz.isFreeStudy ? '자율학습' : '단어 시험');
+  header.innerHTML = `<h1>${titleText}</h1><div class="sub">정답 ${quiz.correctCount} · 오답 ${quiz.idx-quiz.correctCount}</div>`;
   app.appendChild(header);
 
   const card = el('div','quizcard');
@@ -493,14 +494,15 @@ async function nextQuiz(){
 
   const app = document.getElementById('app');
   app.innerHTML = '<div class="loading"><span class="spinner"></span> 채점 중...</div>';
-  const action = quiz.isFreeStudy ? 'submitFreeStudyResult' : 'submitRoundResult';
-  const params = quiz.isFreeStudy ? {answers: quiz.answers} : {round: quiz.round, answers: quiz.answers};
+  const action = quiz.isWrongReview ? 'submitWrongReviewResult' : (quiz.isFreeStudy ? 'submitFreeStudyResult' : 'submitRoundResult');
+  const params = (quiz.isWrongReview || quiz.isFreeStudy) ? {answers: quiz.answers} : {round: quiz.round, answers: quiz.answers};
   const res = await call(action, params);
-  if(!res.ok){ alert(res.message); state.tab = quiz.isFreeStudy ? 'freestudy' : 'home'; render(); return; }
-  renderQuizResult(res, quiz.isFreeStudy);
+  const backTab = quiz.isWrongReview ? 'wrong' : (quiz.isFreeStudy ? 'freestudy' : 'home');
+  if(!res.ok){ alert(res.message); state.tab = backTab; render(); return; }
+  renderQuizResult(res, quiz.isFreeStudy, quiz.isWrongReview);
 }
 
-function renderQuizResult(res, isFreeStudy){
+function renderQuizResult(res, isFreeStudy, isWrongReview){
   const app = document.getElementById('app');
   app.innerHTML = '';
   const pct = Math.round(res.score/res.total*100);
@@ -512,20 +514,27 @@ function renderQuizResult(res, isFreeStudy){
     <div style="font-family:'IBM Plex Mono',monospace;font-size:15px;"><b>${res.score}</b> / ${res.total} 정답</div>`;
   app.appendChild(panel);
 
+  if(isWrongReview && res.overcomeCount>0){
+    app.appendChild(el('div','panel center', `<div class="hint">이번에 <b>${res.overcomeCount}개</b> 단어를 극복해서 오답노트에서 사라졌어요.</div>`));
+  }
+
   if(res.wrongList.length>0){
     const wp = el('div','panel');
-    wp.appendChild(el('h2', null, `틀린 단어 <span class="badge badge-overdue">${res.wrongList.length}개</span>`));
+    const wrongTitle = isWrongReview ? '아직 헷갈리는 단어' : '틀린 단어';
+    wp.appendChild(el('h2', null, `${wrongTitle} <span class="badge badge-overdue">${res.wrongList.length}개</span>`));
     res.wrongList.forEach(w=>{
       const row = el('div','roundcard');
       row.innerHTML = `<div><div class="rl" style="font-family:'Source Serif 4',serif;">${w.word}</div><div class="rr">${w.meaning}</div></div>`;
       wp.appendChild(row);
     });
-    wp.appendChild(el('div','hint','오답노트에 자동 저장되었어요. [오답노트] 탭에서 복습할 수 있어요.'));
+    if(!isWrongReview) wp.appendChild(el('div','hint','오답노트에 자동 저장되었어요. [오답노트] 탭에서 복습할 수 있어요.'));
     app.appendChild(wp);
   }
 
-  const homeBtn = el('button','btn btn-primary btn-block', isFreeStudy ? '자율학습으로' : '시험 목록으로');
-  homeBtn.onclick = ()=>{ state.tab = isFreeStudy ? 'freestudy' : 'home'; render(); };
+  const backTab = isWrongReview ? 'wrong' : (isFreeStudy ? 'freestudy' : 'home');
+  const backLabel = isWrongReview ? '오답노트로' : (isFreeStudy ? '자율학습으로' : '시험 목록으로');
+  const homeBtn = el('button','btn btn-primary btn-block', backLabel);
+  homeBtn.onclick = ()=>{ state.tab = backTab; render(); };
   app.appendChild(homeBtn);
 }
 
@@ -606,9 +615,9 @@ async function renderStudentFreeStudy(body){
   body.appendChild(panel);
 }
 
-/* ---- 단어카드(뜻 가리기) 모드: 채점 없이 앞/뒤로 넘기며 훑어보는 자율학습 ---- */
-function startFlashCards(cards){
-  state.flashcards = { cards, idx:0, revealed:false };
+/* ---- 단어카드(뜻 가리기) 모드: 채점 없이 앞/뒤로 넘기며 훑어보는 자율학습/오답복습 ---- */
+function startFlashCards(cards, backTab){
+  state.flashcards = { cards, idx:0, revealed:false, backTab: backTab || 'freestudy' };
   renderFlashCard();
 }
 
@@ -645,10 +654,11 @@ function renderFlashCard(){
   const prevBtn = el('button','btn btn-ghost','← 이전');
   prevBtn.disabled = fc.idx===0;
   prevBtn.onclick = ()=>{ if(fc.idx>0){ fc.idx--; fc.revealed=false; renderFlashCard(); } };
-  const nextBtn = el('button','btn btn-primary', fc.idx===fc.cards.length-1 ? '자율학습으로' : '다음 →');
+  const backLabel = fc.backTab==='wrong' ? '오답노트로' : '자율학습으로';
+  const nextBtn = el('button','btn btn-primary', fc.idx===fc.cards.length-1 ? backLabel : '다음 →');
   nextBtn.onclick = ()=>{
     if(fc.idx < fc.cards.length-1){ fc.idx++; fc.revealed=false; renderFlashCard(); }
-    else { state.tab='freestudy'; render(); }
+    else { state.tab=fc.backTab; render(); }
   };
   nav.appendChild(prevBtn); nav.appendChild(nextBtn);
   card.appendChild(nav);
@@ -665,6 +675,29 @@ async function renderStudentWrong(body){
   if(res.notes.length===0){
     panel.appendChild(el('div','hint','아직 저장된 오답이 없어요.'));
   } else {
+    const reviewRow = el('div','row');
+    const quizBtn = el('button','btn btn-teal','오답 객관식으로 복습');
+    const cardBtn = el('button','btn btn-ghost','오답 단어카드로 복습');
+    reviewRow.appendChild(quizBtn); reviewRow.appendChild(cardBtn);
+    panel.appendChild(reviewRow);
+    panel.appendChild(el('div','hint','객관식에서 맞춘 단어는 오답노트에서 자동으로 사라져요.'));
+
+    quizBtn.onclick = async ()=>{
+      const app = document.getElementById('app');
+      app.innerHTML = '<div class="loading"><span class="spinner"></span> 오답 문제를 불러오는 중...</div>';
+      const r = await call('getWrongReviewQuestions', {mode:'quiz'});
+      if(!r.ok){ alert(r.message); state.tab='wrong'; render(); return; }
+      state.quiz = { round:null, questions: r.questions, idx:0, correctCount:0, answers:[], wrongList:[], isWrongReview:true };
+      renderQuizQuestion();
+    };
+    cardBtn.onclick = async ()=>{
+      const app = document.getElementById('app');
+      app.innerHTML = '<div class="loading"><span class="spinner"></span> 카드를 불러오는 중...</div>';
+      const r = await call('getWrongReviewQuestions', {mode:'card'});
+      if(!r.ok){ alert(r.message); state.tab='wrong'; render(); return; }
+      startFlashCards(r.cards, 'wrong');
+    };
+
     res.notes.forEach(n=>{
       const row = el('div','roundcard');
       const left = el('div');
